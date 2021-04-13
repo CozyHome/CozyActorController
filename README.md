@@ -30,24 +30,24 @@ If you're simply replacing this with Unity's default Character Controller, do th
 3. Find the method that you are running CharacterController.Move() (this is usually your FixedUpdate() method) and do the following:
 
 Before the move call, you'll need to set: 
-1. The Actor's Velocity to a given Vector \n
-2. The Actor's Orientation to a given Quaternion \n
-3. The Actor's Position to a given Vector \n
+1. The Actor's Velocity to a given Vector 
+2. The Actor's Orientation to a given Quaternion 
+3. The Actor's Position to a given Vector 
 
-If you're representing your character with Unity's default Transform component like the Character Controller does, simply refer to the following boilerplate:
+If you're representing your character with Unity's default Transform component like the Character Controller does, simply refer to the following boilerplate: 
 
 /* BEGINNING OF YOUR SCRIPT'S UPDATE METHOD */
 
 actor.SetVelocity(/* your velocity goes here */);
-actor.SetPosition(transform.position);
-actor.SetOrientation(transform.rotation);
+actor.SetPosition(transform.position); 
+actor.SetOrientation(transform.rotation); 
 
-/* Your actor's move call should go AFTER your initial assignment */
-ActorHeader.Move(receiver, actor, Time.fixedDeltaTime);
+/* Your actor's move call should go AFTER your initial assignment */ 
+ActorHeader.Move(receiver, actor, Time.fixedDeltaTime); 
 
-/* After your actor's movement has been executed, you'll want to update the character's transform values accordingly */
+/* After your actor's movement has been executed, you'll want to update the character's transform values accordingly */ 
 
-transform.SetPositionAndRotation(actor._position, actor._orientation);
+transform.SetPositionAndRotation(actor._position, actor._orientation); 
 
 /* ENDING OF YOUR SCRIPT'S UPDATE METHOD */
 
