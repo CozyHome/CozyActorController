@@ -10,8 +10,6 @@ Installation Guide:
 
 2. Drag the "ActorScripts" folder into your currently existing Unity workspace.
 
-3. Profit
-
 Actor Scripting Guide:
 
 To simply get your actor moving, do the following:
