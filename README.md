@@ -1,5 +1,5 @@
 # Cozy Actor Controller
- A standalone repository for the Cozy Actor Controller.
+ A standalone repository for the Cozy Actor Controller designed for Classic Unity3D Scripting.
 ![Logo](https://user-images.githubusercontent.com/70460173/114629508-b586e780-9c86-11eb-84e0-d318de938c9f.png)
 
 Installation Guide:
