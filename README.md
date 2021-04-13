@@ -1,4 +1,4 @@
-# cozyhome-actor
+# Cozy Actor Controller
  A standalone repository for the Cozy Actor Controller.
 ![Logo](https://user-images.githubusercontent.com/70460173/114629508-b586e780-9c86-11eb-84e0-d318de938c9f.png)
 
