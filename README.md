@@ -30,9 +30,9 @@ If you're simply replacing this with Unity's default Character Controller, do th
 3. Find the method that you are running CharacterController.Move() (this is usually your FixedUpdate() method) and do the following:
 
 Before the move call, you'll need to set: 
-1. The Actor's Velocity to a given Vector
-2. The Actor's Orientation to a given Quaternion
-3. The Actor's Position to a given Vector
+1. The Actor's Velocity to a given Vector \n
+2. The Actor's Orientation to a given Quaternion \n
+3. The Actor's Position to a given Vector \n
 
 If you're representing your character with Unity's default Transform component like the Character Controller does, simply refer to the following boilerplate:
 
