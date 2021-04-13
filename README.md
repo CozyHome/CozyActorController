@@ -68,8 +68,11 @@ If you're representing your character with Unity's default Transform component l
 /* BEGINNING OF YOUR SCRIPT'S UPDATE METHOD */
 
 actor.SetVelocity(/* your velocity goes here */);
+
 actor.SetPosition(transform.position);
+
 actor.SetOrientation(transform.rotation);
+
 
 /* Your actor's move call should go AFTER your initial assignment */
 ActorHeader.Move(receiver, actor, Time.fixedDeltaTime);
