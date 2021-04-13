@@ -36,6 +36,8 @@ Before the move call, you'll need to set:
 
 If you're representing your character with Unity's default Transform component like the Character Controller does, simply refer to the following boilerplate: 
 
+```
+
 /* BEGINNING OF YOUR SCRIPT'S UPDATE METHOD */
 
 actor.SetVelocity(/* your velocity goes here */);
@@ -51,6 +53,8 @@ transform.SetPositionAndRotation(actor._position, actor._orientation);
 
 /* ENDING OF YOUR SCRIPT'S UPDATE METHOD */
 
+```
+
 However, if you're starting from scratch you'll need to follow these instructions:
 
 3. Create or use an already existing C# script that implements the ActorHeader.IActorReceiver interface. This is where your actor
@@ -65,14 +69,13 @@ Before your move call, you'll need to set:
 
 If you're representing your character with Unity's default Transform component like the Character Controller does, simply refer to the following boilerplate:
 
+```
+
 /* BEGINNING OF YOUR SCRIPT'S UPDATE METHOD */
 
 actor.SetVelocity(/* your velocity goes here */);
-
 actor.SetPosition(transform.position);
-
 actor.SetOrientation(transform.rotation);
-
 
 /* Your actor's move call should go AFTER your initial assignment */
 ActorHeader.Move(receiver, actor, Time.fixedDeltaTime);
@@ -81,5 +84,7 @@ ActorHeader.Move(receiver, actor, Time.fixedDeltaTime);
 transform.SetPositionAndRotation(actor._position, actor._orientation);
 
 /* ENDING OF YOUR SCRIPT'S UPDATE METHOD */
+
+```
 
 With this established, you'll be able to start writing out your own Character Controller within minutes. Happy coding :)
