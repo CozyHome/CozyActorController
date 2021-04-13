@@ -36,7 +36,7 @@ Before the move call, you'll need to set:
 
 If you're representing your character with Unity's default Transform component like the Character Controller does, simply refer to the following boilerplate: 
 
-```
+```c#
 
 /* BEGINNING OF YOUR SCRIPT'S UPDATE METHOD */
 
@@ -69,7 +69,7 @@ Before your move call, you'll need to set:
 
 If you're representing your character with Unity's default Transform component like the Character Controller does, simply refer to the following boilerplate:
 
-```
+```c#
 
 /* BEGINNING OF YOUR SCRIPT'S UPDATE METHOD */
 
