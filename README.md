@@ -4,11 +4,11 @@
 
 Installation Guide:
 
-0. Either create or open up your own Unity project. 
+1. Either create or open up your own Unity project. 
 
-1. Download the cozy-actor-controller repository and unzip it into a temporary folder.
+2. Download the cozy-actor-controller repository and unzip it into a temporary folder.
 
-2. Drag the "ActorScripts" folder into your currently existing Unity workspace.
+3. Drag the "ActorScripts" folder into your currently existing Unity workspace.
 
 Actor Scripting Guide:
 
