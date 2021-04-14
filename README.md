@@ -49,7 +49,7 @@ ActorHeader.Move(receiver, actor, Time.fixedDeltaTime);
 
 /* After your actor's movement has been executed, you'll want to update the character's transform values accordingly */ 
 
-transform.SetPositionAndRotation(actor._position, actor._orientation); 
+transform.SetPositionAndRotation(actor.position, actor.orientation); 
 
 /* ENDING OF YOUR SCRIPT'S UPDATE METHOD */
 
@@ -81,7 +81,7 @@ actor.SetOrientation(transform.rotation);
 ActorHeader.Move(receiver, actor, Time.fixedDeltaTime);
 
 /* After your actor's movement has been executed, you'll want to update the character's transform values accordingly */
-transform.SetPositionAndRotation(actor._position, actor._orientation);
+transform.SetPositionAndRotation(actor.position, actor.orientation);
 
 /* ENDING OF YOUR SCRIPT'S UPDATE METHOD */
 
