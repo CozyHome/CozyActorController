@@ -7,21 +7,17 @@ namespace com.cozyhome.Actors
     public class BoxActor : ActorHeader.Actor
     {
         [System.NonSerialized] private ArchetypeHeader.BoxArchetype BoxArchetype;
-        /* UnityEngine */
-        void Start()
-        {
-            SetPosition(transform.position);
-            SetOrientation(transform.rotation);
-            SetVelocity(Vector3.zero);
-
-            BoxArchetype = new ArchetypeHeader.BoxArchetype(
-                GetComponent<BoxCollider>()
-            );
-        }
-
+        
         public override ArchetypeHeader.Archetype GetArchetype() => BoxArchetype;
 
         public override bool DetermineGroundStability(Vector3 _vel, RaycastHit _hit, LayerMask _gfilter)
             => base.DeterminePlaneStability(_hit.normal, _hit.collider);
+
+        protected override void InitializeSpecifics()
+        {
+            BoxArchetype = new ArchetypeHeader.BoxArchetype(
+                GetComponent<BoxCollider>()
+            );
+        }
     }
 }

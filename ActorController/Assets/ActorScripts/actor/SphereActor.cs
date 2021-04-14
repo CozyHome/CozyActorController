@@ -7,12 +7,8 @@ namespace com.cozyhome.Actors
     {
         [System.NonSerialized] private ArchetypeHeader.SphereArchetype SphereArchetype;
         /* UnityEngine */
-        void Start() 
+        protected override void InitializeSpecifics() 
         {
-            SetPosition(transform.position);
-            SetOrientation(transform.rotation);
-            SetVelocity(Vector3.zero);
-        
             SphereArchetype = new ArchetypeHeader.SphereArchetype(
                 GetComponent<SphereCollider>()
             );

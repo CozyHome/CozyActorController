@@ -27,7 +27,7 @@ namespace com.cozyhome.Actors
 
         // Now that I think about it, I should really write a complementary sub-package that links the ActorHeader to some state machine based integration
         // specifically designed for the Actor system I've designed (just a thought). 
-        public static void Move(IActorReceiver _rec, Actor _actor, float fdt) => _movefuncs[(int)_actor.MoveType].Invoke(_rec, _actor, fdt);
+        public static void Move(IActorReceiver _rec, Actor _actor, float fdt) => _movefuncs[(int)_actor.GetMoveType].Invoke(_rec, _actor, fdt);
 
         public enum SlideSnapType { Never = 0, Toggled = 1, Always = 2 };
         public enum MoveType { Fly = 0, /* PM_FlyMove() */ Slide = 1, /* PM_SlideMove() */  Noclip = 2 /* PM_NoclipMove() */  };
@@ -55,16 +55,21 @@ namespace com.cozyhome.Actors
             }
         }
 
+        /* Heavily OOP-designed. Not a fan but it allows for an easier understanding/development
+           of future content
+        */
         public abstract class Actor : MonoBehaviour
         {
             [Header("Move Type Properties")]
             [Tooltip("The move type the actor will resort to when its Move func is called by the end-user. \nFly = The actor will fly around the scene whilst resolving collision.\nSlide = The actor will slide around the scene whilst resolving collision and simulating ground detection.\nNoclip = The actor will fly around the scene whilst ignoring all collisions")]
-            [SerializeField] private MoveType _moveType = MoveType.Fly;
+            [SerializeField] private MoveType MoveType = ActorHeader.MoveType.Fly;
 
             [Tooltip("The snap type the actor will abide by when determining its ground state. \nNever = The actor will never snap to the ground. \nToggled = The actor will only snap to the ground if its snapenabled boolean is set to true. \nAlways = The actor will always snap to the ground.")]
-            [SerializeField] private SlideSnapType _snapType = SlideSnapType.Always;
+            [SerializeField] private SlideSnapType SnapType = SlideSnapType.Always;
             [Tooltip("Whether or not the actor will snap to the ground if its snap type is set to SlideSnapType.Toggled enum.")]
-            [SerializeField] private bool _snapenabled = true;
+            [SerializeField] private bool SnapEnabled = true;
+            [Tooltip("Whether this actor will initialize itself using Unity's Start() invokation")]
+            [SerializeField] private bool InitializeOnStart = true;
 
             [Header("Ground Stability Properties")]
             [Tooltip("The maximum angular difference a traced plane must make to the grounding plane in order to be classified as an obstruction.")]
@@ -85,14 +90,14 @@ namespace com.cozyhome.Actors
 
             [System.NonSerialized] public Vector3 _position;
             [System.NonSerialized] public Vector3 _velocity;
-            [System.NonSerialized] public Quaternion _orientation;
+            [System.NonSerialized] public Quaternion orientation;
 
             public RaycastHit[] Hits => _internalhits;
             public Collider[] Colliders => _internalcolliders;
             public Vector3[] Normals => _internalnormals;
-            public bool SnapEnabled => _snapenabled;
-            public MoveType MoveType => _moveType;
-            public SlideSnapType SnapType => _snapType;
+            public bool IsSnapEnabled => SnapEnabled;
+            public MoveType GetMoveType => MoveType;
+            public SlideSnapType GetSnapType => SnapType;
             public GroundHit Ground => _groundhit;
             public GroundHit LastGround => _lastgroundhit;
             public LayerMask Mask => _filter;
@@ -103,16 +108,35 @@ namespace com.cozyhome.Actors
             public static void Slide(IActorReceiver receiver, Actor actor, float fdt) => PM_SlideMove(receiver, actor, fdt);
             public static void Noclip(IActorReceiver receiver, Actor actor, float fdt) => PM_NoclipMove(receiver, actor, fdt);
 
-            public void SetVelocity(Vector3 _velocity) => this._velocity = _velocity;
-            public void SetPosition(Vector3 _position) => this._position = _position;
-            public void SetOrientation(Quaternion _orientation) => this._orientation = _orientation;
-            public void SetMoveType(MoveType _movetype) => this._moveType = _movetype;
-            public void SetSnapType(SlideSnapType _snaptype) => this._snapType = _snaptype;
-            public void SetSnapEnabled(bool _snapenabled) => this._snapenabled = _snapenabled;
+            public void SetVelocity(Vector3 velocity) => this._velocity = velocity;
+            public void SetPosition(Vector3 position) => this._position = position;
+            public void SetOrientation(Quaternion orientation) => this.orientation = orientation;
+            public void SetMoveType(MoveType movetype) => this.MoveType = movetype;
+            public void SetSnapType(SlideSnapType snaptype) => this.SnapType = snaptype;
+            public void SetSnapEnabled(bool snapenabled) => this.SnapEnabled = snapenabled;
+
+            /* UnityEngine*/
+            void Start()
+            {
+                if (InitializeOnStart)
+                {
+                    InitializeGenerics();
+                    InitializeSpecifics();
+                }
+            }
+
+            private void InitializeGenerics() /* a kind of default ctor */
+            {
+                SetPosition(transform.position);
+                SetOrientation(transform.rotation);
+                SetVelocity(Vector3.zero);
+            }
+
+            protected abstract void InitializeSpecifics(); /* exclusively implemented by each actor type */
 
             public abstract ArchetypeHeader.Archetype GetArchetype();
-            public abstract bool DetermineGroundStability(Vector3 _vel, RaycastHit _hit, LayerMask _gfilter);
-            public virtual bool DeterminePlaneStability(Vector3 _normal, Collider _other) => Vector3.Angle(_normal, _orientation * Vector3.up) <= MaximumStableSlideAngle;
+            public abstract bool DetermineGroundStability(Vector3 velocity, RaycastHit hit, LayerMask gfilter);
+            public virtual bool DeterminePlaneStability(Vector3 plane, Collider otherc) => Vector3.Angle(plane, orientation * Vector3.up) <= MaximumStableSlideAngle;
 
         }
 
@@ -137,7 +161,7 @@ namespace com.cozyhome.Actors
             /* actor transform values */
             Vector3 position = actor._position;
             Vector3 velocity = actor._velocity;
-            Quaternion orientation = actor._orientation;
+            Quaternion orientation = actor.orientation;
 
             /* archetype buffers & references */
             Vector3 lastplane = Vector3.zero;
@@ -336,13 +360,13 @@ namespace com.cozyhome.Actors
             /* actor transform values */
             Vector3 position = actor._position;
             Vector3 velocity = actor._velocity;
-            Quaternion orientation = actor._orientation;
+            Quaternion orientation = actor.orientation;
 
 
             /* archetype buffers & references */
             ArchetypeHeader.Archetype archetype = actor.GetArchetype();
             Collider self = archetype.Collider();
-            SlideSnapType snaptype = actor.SnapType;
+            SlideSnapType snaptype = actor.GetSnapType;
             Collider[] colliderbuffer = actor.Colliders;
             LayerMask layermask = actor.Mask;
 
@@ -466,7 +490,7 @@ namespace com.cozyhome.Actors
                                 break;
                             case SlideSnapType.Toggled:
                                 /* Snap type is determined by a separate bool */
-                                cansnap = actor.SnapEnabled;
+                                cansnap = actor.IsSnapEnabled;
                                 break;
                         }
 
@@ -563,7 +587,7 @@ namespace com.cozyhome.Actors
                          1. send a callback to our receiver to notify them we've hit ground somewhere 
                          2. set gtracelen to zero to exit out of ground snap loop                        
                         */
-                        
+
                         receiver.OnGroundHit(ground, lastground, layermask);
                         gtracelen = 0F;
                     }
@@ -815,7 +839,6 @@ namespace com.cozyhome.Actors
 
 
         #endregion
-
 
         // In an effort to remove Actor Object & Callback Object coupling, you'll be required to pass reference to an IActorReceiver interface
         // whenever calling your move funcs as this will allow you to directly respond to information received during any of the Move() executions

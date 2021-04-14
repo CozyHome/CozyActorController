@@ -7,13 +7,9 @@ namespace com.cozyhome.Actors
     public class CapsuleActor : ActorHeader.Actor
     {
         [System.NonSerialized] private ArchetypeHeader.CapsuleArchetype CapsuleArchetype;
-        /* UnityEngine */
-        void Start()
+        
+        protected override void InitializeSpecifics()
         {
-            SetPosition(transform.position);
-            SetOrientation(transform.rotation);
-            SetVelocity(Vector3.zero);
-
             CapsuleArchetype = new ArchetypeHeader.CapsuleArchetype(
                 GetComponent<CapsuleCollider>()
             );
@@ -33,6 +29,7 @@ namespace com.cozyhome.Actors
                 && DetermineEdgeStability(_vel, _hit.point, _hit.normal, _gfilter);
         }
 
+        // TODO: 
         // rework ledge detection: 
         //  1. simplify/abstract this further so there is less boilerplate inlined in method
         //  2. fix scenarios in which capsules will orient themselves along the ledge and launching themselves
@@ -51,7 +48,7 @@ namespace com.cozyhome.Actors
             Vector3 _hitnormal,
             LayerMask _filter)
         {
-            Vector3 _u = _orientation * new Vector3(0, 1, 0);
+            Vector3 _u = orientation * new Vector3(0, 1, 0);
             Vector3 _fp = VectorHeader.ClipVector(_hitnormal, _u);
             _fp.Normalize();
 
