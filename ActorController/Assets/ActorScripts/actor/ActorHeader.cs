@@ -14,11 +14,12 @@ namespace com.cozyhome.Actors
         // how C# optimizes these sorts of things, so just give
         // me a break :)
         private delegate void MoveFunc(IActorReceiver _rec, Actor _actor, float fdt);
-        private static readonly MoveFunc[] _movefuncs = new MoveFunc[3]
+        private static readonly MoveFunc[] _movefuncs = new MoveFunc[4]
         {
             Actor.Fly, // 0
             Actor.Slide, // 1
-            Actor.Noclip // 2
+            Actor.SlideStep, // 2
+            Actor.Noclip // 3
         };
 
         // im a bit worried about casting to int but premature optimization isn't healthy and should fuck off for the time being
@@ -30,7 +31,13 @@ namespace com.cozyhome.Actors
         public static void Move(IActorReceiver _rec, Actor _actor, float fdt) => _movefuncs[(int)_actor.GetMoveType].Invoke(_rec, _actor, fdt);
 
         public enum SlideSnapType { Never = 0, Toggled = 1, Always = 2 };
-        public enum MoveType { Fly = 0, /* PM_FlyMove() */ Slide = 1, /* PM_SlideMove() */  Noclip = 2 /* PM_NoclipMove() */  };
+        public enum MoveType
+        {
+            Fly = 0, /* PM_FlyMove() */
+            Slide = 1, /* PM_SlideMove() */
+            SlideStep = 2, /*PM_SlideStepMove() */
+            Noclip = 3 /* PM_NoclipMove() */
+        };
 
         // A shameless data class that I use to store grounding information. I'm not fucking bothering
         // with getters and setters as they pollute the class and make it more complicated than it 
@@ -68,6 +75,8 @@ namespace com.cozyhome.Actors
             [SerializeField] private SlideSnapType SnapType = SlideSnapType.Always;
             [Tooltip("Whether or not the actor will snap to the ground if its snap type is set to SlideSnapType.Toggled enum.")]
             [SerializeField] private bool SnapEnabled = true;
+            [Tooltip("Whether or not the actor will step on perpendicular(ish) surfaces during the traceback loop")]
+            [SerializeField] private bool StepEnabled = true;
             [Tooltip("Whether this actor will initialize itself using Unity's Start() invokation")]
             [SerializeField] private bool InitializeOnStart = true;
 
@@ -98,6 +107,7 @@ namespace com.cozyhome.Actors
             public bool IsSnapEnabled => SnapEnabled;
             public MoveType GetMoveType => MoveType;
             public SlideSnapType GetSnapType => SnapType;
+            public bool GetSnapEnabled => SnapEnabled;
             public GroundHit Ground => _groundhit;
             public GroundHit LastGround => _lastgroundhit;
             public LayerMask Mask => _filter;
@@ -106,6 +116,7 @@ namespace com.cozyhome.Actors
             // as simple as displacing a primitive.
             public static void Fly(IActorReceiver receiver, Actor actor, float fdt) => PM_FlyMove(receiver, actor, fdt);
             public static void Slide(IActorReceiver receiver, Actor actor, float fdt) => PM_SlideMove(receiver, actor, fdt);
+            public static void SlideStep(IActorReceiver receiver, Actor actor, float fdt) => PM_SlideStepMove(receiver, actor, fdt);
             public static void Noclip(IActorReceiver receiver, Actor actor, float fdt) => PM_NoclipMove(receiver, actor, fdt);
 
             public void SetVelocity(Vector3 velocity) => this._velocity = velocity;
@@ -114,6 +125,7 @@ namespace com.cozyhome.Actors
             public void SetMoveType(MoveType movetype) => this.MoveType = movetype;
             public void SetSnapType(SlideSnapType snaptype) => this.SnapType = snaptype;
             public void SetSnapEnabled(bool snapenabled) => this.SnapEnabled = snapenabled;
+            public void SetStepEnabled(bool stepenabled) => this.StepEnabled = stepenabled;
 
             /* UnityEngine*/
             void Start()
@@ -815,6 +827,544 @@ namespace com.cozyhome.Actors
 
         #endregion
 
+        #region Slide/Step
+
+        /*
+         PM_SlideMove() is one of the several variant Move() funcs available standard with the
+         Actor package provided. It's entire purpose is to 'slide' and 'snap' the Actor on 'stable'
+         surfaces whilst also dealing with the conventional issue of movement into and along blocking
+         planes in the physics scene. Use this method primarily if you plan on keeping your actor level
+         with the floor.
+        */
+        public static void PM_SlideStepMove(
+            IActorReceiver receiver,
+            Actor actor,
+            float fdt)
+        {
+            /* BASE CASES IN WHICH WE SHOULDN'T MOVE AT ALL */
+            if (actor == null || receiver == null)
+                return;
+
+            /* Steps:    
+                1. Continuous Ground Resolution
+                2. Discrete Overlap Resolution
+                3. Continuous Trace Prevention
+            */
+
+            /* actor transform values */
+            Vector3 position = actor._position;
+            Vector3 velocity = actor._velocity;
+            Quaternion orientation = actor.orientation;
+
+
+            /* archetype buffers & references */
+            ArchetypeHeader.Archetype archetype = actor.GetArchetype();
+            Collider self = archetype.Collider();
+            SlideSnapType snaptype = actor.GetSnapType;
+            Collider[] overlapbuffer = actor.Colliders;
+            LayerMask layermask = actor.Mask;
+
+            Vector3[] normalsbuffer = actor.Normals;
+            RaycastHit[] tracebuffer = actor.Hits;
+
+            /* ground trace values */
+            Vector3 gposition = position;
+            Vector3 groundtracedir = orientation * new Vector3(0, -1, 0);
+
+            /* trace values */
+            Vector3 lastplane = Vector3.zero;
+            Vector3 updir = orientation * new Vector3(0, 1, 0);
+
+            float timefactor = 1F;
+            float skin = ArchetypeHeader.GET_SKINEPSILON(archetype.PrimitiveType());
+            float bias = ArchetypeHeader.GET_TRACEBIAS(archetype.PrimitiveType());
+
+            int numbumps = 0;
+            int numgroundbumps = 0;
+            int numpushbacks = 0;
+            int geometryclips = 0;
+
+            bool canstep = actor.GetSnapEnabled;
+
+            /* end of references */
+
+            GroundHit ground = actor.Ground;
+            GroundHit lastground = actor.LastGround;
+
+            /* preserve last frame ground data into another struct */
+            lastground.actorpoint = ground.actorpoint;
+            lastground.normal = ground.normal;
+            lastground.point = ground.point;
+            lastground.stable = ground.stable;
+            lastground.snapped = ground.snapped;
+            lastground.distance = ground.distance;
+
+            ground.Clear();
+
+            /* 
+               I personally wish I could figure out a "stateless" way to implement ground snapping, but
+               for the time being this seems to work best.
+            */
+
+            /* feel free to change these values, I think they're pretty decent atm */
+            float gtracelen = (lastground.stable && lastground.snapped) ? 0.075F : 0.05F;
+
+            while (numgroundbumps++ < MAX_GROUNDBUMPS &&
+                gtracelen > 0F)
+            {
+                /*
+                    -- trace along dir --
+
+                    if detected 
+                        if stable : 
+                            end trace and determine whether a snap is to occur
+                        else :
+                            clip along floor
+                            continue
+                    else : 
+                    break out of loop as no floor was detected
+                */
+
+                /* 
+                    IMPORTANT! 
+                        Our ground snapping position needs to be offset
+                        upward as our trace may end up "tunneling" as a result of 
+                        being too close to the floor. 
+
+                        We compensate this offset by increasing our trace length to traverse
+                        the offset distance in addition to our additional length
+
+                */
+                archetype.Trace(gposition + (updir * skin),
+                    groundtracedir,
+                    gtracelen + skin,
+                    orientation,
+                    layermask,
+                    /* inflate */ 0F,
+                    QueryTriggerInteraction.Ignore,
+                    tracebuffer,
+                    out int numgroundtraces);
+
+                /* filter out our archetype and find the closest valid interception */
+                ArchetypeHeader.TraceFilters.FindClosestFilterInvalids(
+                    ref numgroundtraces,
+                    out int i0,
+                    bias,
+                    self,
+                    tracebuffer);
+
+                if (i0 >= 0) /* an intersection has occured, but we aren't sure its ground yet */
+                {
+                    RaycastHit _closest = tracebuffer[i0];
+
+                    ground.distance = _closest.distance;
+                    ground.point = _closest.point;
+                    ground.normal = _closest.normal;
+                    ground.actorpoint = gposition;
+                    ground.stable = actor.DetermineGroundStability(velocity, _closest, layermask);
+                    ground.snapped = false;
+
+                    gposition += groundtracedir * (_closest.distance);
+                    /*
+                     warp regardless of stablility. We'll only be setting our trace position
+                     to our ground trace position if a stable floor has been determined, and snapping is enabled. 
+                    */
+
+                    if (ground.stable)
+                    {
+                        /* 
+                         Assume we can snap automatically if our snap type
+                         is set to always 
+                        */
+                        bool cansnap = (snaptype == SlideSnapType.Always);
+
+                        /*
+                         Handling the other snap types:
+                        */
+                        switch (snaptype)
+                        {
+                            case SlideSnapType.Never:
+                                cansnap = false;
+                                break;
+                            case SlideSnapType.Toggled:
+                                /* Snap type is determined by a separate bool */
+                                cansnap = actor.IsSnapEnabled;
+                                break;
+                        }
+
+                        ground.snapped = cansnap;
+
+                        /* trace upwards to see if we can fit inside a snap position and a ceiling
+                            that may exist above it... */
+                        archetype.Trace(
+                            gposition,
+                            updir,
+                            skin + 0.1F,
+                            orientation,
+                            layermask,
+                            0F,
+                            QueryTriggerInteraction.Ignore,
+                            tracebuffer,
+                            out int numupwardbumps);
+
+                        ArchetypeHeader.TraceFilters.FindClosestFilterInvalids(ref numupwardbumps,
+                            out int gi,
+                            bias,
+                            self,
+                            tracebuffer);
+
+                        /* this part may be a bit confusing to understand */
+
+                        /* if a ceiling is discovered: */
+                        if (gi >= 0)
+                        {
+                            /* 
+                             generate a potential crease vector given 
+                             the ground normal and the ceiling normal
+                            */
+
+                            RaycastHit ceiltrace = tracebuffer[gi];
+
+                            Vector3 crease = Vector3.Cross(ceiltrace.normal, ground.normal);
+                            crease.Normalize();
+
+                            Vector3 forw = Vector3.Cross(updir, crease);
+                            forw.Normalize();
+
+                            if (VectorHeader.Dot(velocity, forw) <= 0F)
+                            {
+                                if (VectorHeader.Dot(velocity, ceiltrace.normal) < 0F)
+                                    receiver.OnTraceHit(ceiltrace, gposition, velocity);
+
+                                geometryclips |= (1 << 1);
+                                VectorHeader.ProjectVector(ref velocity, crease);
+                            }
+
+                            /*
+                             if a ceiling is found, only move upward by the difference
+                             between our ceiling height and our skin.
+
+                             in the scenario where our ceiling distance is greater than 
+                             our skin length, only move the minimum amount (skin)
+
+                             in the scenario where our ceiling distance is less than our skin,
+                             we've potentially encountered a tunneling position. In this scenario,
+                             don't move upward at all.
+                            */
+
+                            gposition += updir * Mathf.Max(
+                                Mathf.Min(ceiltrace.distance - skin, skin), 0F);
+
+                        }
+                        else /* if no ceiling is found, move the require distance upward */
+                            gposition += updir * (skin);
+
+                        /* 
+                         if a snap was valid and allowed, 
+                         1. set our position to the snap point 
+                         
+                         2. set our last plane discovered to the ground normal
+                         
+                         3. notify our geometry clipping algorithm that we've hit our first blocking plane
+                         
+                         4. clip our velocity along the ground normal as we are effectively skipping the 
+                            first iteration of our geometry clipping algorithm
+
+                        */
+
+                        if (ground.snapped)
+                        {
+                            position = gposition;
+
+                            lastplane = ground.normal;
+                            geometryclips |= (1 << 0);
+
+                            VectorHeader.ClipVector(ref velocity, ground.normal);
+                        }
+
+                        /* 
+                         1. send a callback to our receiver to notify them we've hit ground somewhere 
+                         2. set gtracelen to zero to exit out of ground snap loop                        
+                        */
+
+                        receiver.OnGroundHit(ground, lastground, layermask);
+                        gtracelen = 0F;
+                    }
+                    else
+                    {
+                        /* 
+                        1. clip our ground tracing direction along the normal we've discovered 
+                            -this is effectively creating a normal that "rides" along it tangentially
+                        
+                        2. normalize it for next iteration
+                        
+                        3. subtract our trace length for next iteration
+                        */
+
+                        VectorHeader.ClipVector(ref groundtracedir, _closest.normal);
+                        groundtracedir.Normalize();
+                        gtracelen -= _closest.distance;
+                    }
+                }
+                else /* nothing discovered, end out of our ground loop */
+                    gtracelen = 0F;
+            }
+
+            while (numpushbacks++ < ActorHeader.MAX_PUSHBACKS)
+            {
+                archetype.Overlap(
+                    position,
+                    orientation,
+                    layermask,
+                    /* inflate */ 0F,
+                    QueryTriggerInteraction.Ignore,
+                    overlapbuffer,
+                    out int numoverlaps);
+
+                ArchetypeHeader.OverlapFilters.FilterSelf(
+                    ref numoverlaps,
+                    self,
+                    overlapbuffer);
+
+                if (numoverlaps == 0) // nothing !
+                    break;
+                else
+                {
+                    for (int _colliderindex = 0; _colliderindex < numoverlaps; _colliderindex++)
+                    {
+                        Collider otherc = overlapbuffer[_colliderindex];
+                        Transform othert = otherc.GetComponent<Transform>();
+
+                        if (Physics.ComputePenetration(self, position, orientation, otherc, othert.position, othert.rotation, out Vector3 _normal, out float _distance))
+                        {
+                            position += _normal * (_distance + skin);
+
+                            PM_SlideDetermineImmediateGeometry(ref velocity,
+                                ref lastplane,
+                                actor.DeterminePlaneStability(_normal, otherc),
+                                _normal,
+                                ground.normal,
+                                ground.stable && ground.snapped,
+                                updir,
+                                ref geometryclips);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            while (numbumps++ < ActorHeader.MAX_BUMPS
+                  && timefactor > 0)
+            {
+                // Begin Trace
+                Vector3 _trace = velocity * fdt;
+                float _tracelen = _trace.magnitude;
+
+                // IF unable to trace any further, break and end
+                if (_tracelen <= MIN_DISPLACEMENT)
+                    timefactor = 0;
+                else
+                {
+                    archetype.Trace(position,
+                        _trace / _tracelen,
+                        _tracelen + skin,
+                        orientation,
+                        layermask,
+                        0F,
+                        QueryTriggerInteraction.Ignore,
+                        tracebuffer,
+                        out int _tracecount);
+
+                    ArchetypeHeader.TraceFilters.FindClosestFilterInvalids(
+                        ref _tracecount,
+                        out int _i0,
+                        bias,
+                        self,
+                        tracebuffer);
+
+                    if (_i0 <= -1) // nothing discovered :::
+                    {
+                        timefactor = 0; // end move
+                        position += _trace;
+                        break;
+                    }
+                    else // discovered an obstruction:::
+                    {
+                        RaycastHit _closest = tracebuffer[_i0]; /* struct buffer so no need to worry about overriding data */
+                        Vector3 normal = _closest.normal;
+                        Vector3 tracepoint = _closest.point;
+
+
+                        float _rto = _closest.distance / _tracelen;
+                        timefactor -= _rto;
+
+                        float _dis = _closest.distance - skin;
+                        position += (_trace / _tracelen) * _dis; // move back along the trace line!
+
+                        /*
+                        if (canstep && !PM_SlideStepValidation(
+                            position,
+                            orientation,
+                            normal,
+                            tracepoint,
+                            archetype,
+                            layermask,
+                            out Vector3 stepposition
+                        ))
+                        {
+                            
+                            continue;
+                        }
+                        else
+                            continue;
+                        */
+
+                        Vector3 step_position = Vector3.zero;
+
+                        canstep = canstep &&
+                        PM_SlideStepValidation(position,
+                            orientation,
+                            normal,
+                            tracepoint,
+                            tracebuffer,
+                            overlapbuffer,
+                            archetype,
+                            layermask,
+                            out step_position);
+
+                        if (!canstep)
+                        {
+                            receiver.OnTraceHit(_closest, position, velocity);
+
+                            PM_SlideDetermineImmediateGeometry(ref velocity,
+                                        ref lastplane,
+                                        actor.DeterminePlaneStability(normal, _closest.collider),
+                                        normal,
+                                        ground.normal,
+                                        ground.stable && ground.snapped,
+                                        updir,
+                                        ref geometryclips);
+                        }
+                        else
+                        {
+                            position = step_position;
+                            velocity -= VectorHeader.ProjectVector(position - step_position, normal);
+                        }
+                    }
+                }
+            }
+
+            actor.SetPosition(position);
+            actor.SetVelocity(velocity);
+        }
+
+        private static bool PM_SlideStepValidation(
+            Vector3 position,
+            Quaternion orientation,
+            Vector3 normal,
+            Vector3 tracepoint,
+            RaycastHit[] tracebuffer,
+            Collider[] overlapbuffer,
+            ArchetypeHeader.Archetype archetype,
+            LayerMask layermask,
+            out Vector3 step_position)
+        {
+            const float max_correspondance = 0.1F, max_step = 0.5F, min_step = 0.01F, aux_up = 0.05F;
+            Vector3 aux_feet = position;
+            Vector3 prim_up = orientation * new Vector3(0, 1, 0);
+
+            aux_feet += orientation * archetype.Center(); /* account for local offset */
+            aux_feet -= prim_up * archetype.Height() / 2F; /* account for character's height, to reach feet */
+
+            aux_feet += normal * (VectorHeader.Dot(tracepoint - position, normal) - INWARD_STEP_DISTANCE); /* push into obstruction plane to minimize incorrect line trace */
+
+            step_position = position;
+
+            /* simple angular check first. if its not planar to our primitive, its not a step. */
+            if (Mathf.Abs(VectorHeader.Dot(normal, prim_up)) >= max_correspondance)
+                return false;
+
+            /* then we'll linecast from our character's feet to a given step height, to determine how tall the step is */
+
+            int linecast = ArchetypeHeader.TraceRay(
+                _position: aux_feet + prim_up * max_step,
+                _direction: -prim_up,
+                _mag: (max_step + aux_up),
+                tracebuffer,
+                layermask);
+
+            ArchetypeHeader.TraceFilters.FindClosestFilterInvalids(
+                _tracesfound: ref linecast,
+                _closestindex: out int i0,
+                _bias: ArchetypeHeader.GET_TRACEBIAS(ArchetypeHeader.ARCHETYPE_LINE),
+                _self: archetype.Collider(),
+                tracebuffer
+            );
+
+            if (i0 <= -1) /* if no planes were traced we haven't found any floor plane to step onto, it was a false positive */
+                return false;
+
+            /* once again, we want to make sure our newly traced plane is a proper step by measuring the angular correspondance
+                of our upward vector along our traced plane. */
+            if (VectorHeader.Dot(tracebuffer[i0].normal, prim_up) < 1F - max_correspondance)
+                return false;
+
+            /* advance our step position */
+            float step_height = max_step - tracebuffer[i0].distance;
+
+            /* if our step is too small, don't bother stepping upward as it may result in undefined behaviour */
+            if (step_height < min_step)
+                return false;
+
+            step_position += prim_up * (step_height + aux_up);
+            step_position -= normal * (INWARD_STEP_DISTANCE);
+
+            /* overlap at step position, and return true if we aren't overlapping with anything */
+
+            archetype.Overlap(
+                _pos: step_position,
+                _orient: orientation,
+                _filter: layermask,
+                _inflate: 0F,
+                QueryTriggerInteraction.Ignore,
+                overlapbuffer,
+                out int overlapcount);
+
+            ArchetypeHeader.OverlapFilters.FilterSelf(
+                _overlapsfound: ref overlapcount,
+                archetype.Collider(),
+                overlapbuffer
+            );
+
+            if (overlapcount > 0)
+                return false;
+
+            return true;
+        }
+
+        /* 
+            if we've discovered an obstruction, we'll want to see if it is steppable:
+
+            at the moment, I want to make sure our stepping algorithm is fairly efficient, considering
+            how theoretically costly this algo can get
+
+            simply raycast inward from the clipping plane and check below using the up dir
+
+            we can simplify our query search for the following reasons:
+            (1) steps are usually perpendicular to the primitive being cast, so if the angular difference/correspondance between
+            the up vector and the surface normal are in completeley opposite dirs (n dot v) is approx -1, we have a flat surface.
+
+            (2) since the surface is flat, we don't have to worry about our safety overlap colliding with the ground plane, so it's a
+            simple case of detecting anything at a specified point above the plane
+
+            capsules will usually work best for this type of stepping, but if your geometry is fairly simple, boxes are great too.
+
+            I'm going to attempt to write a resolver that doesn't rely on any virtual calls/indirection to potentially aid
+            performance.    
+        */
+
+        #endregion
+
         #region Noclip
 
         // PM_NoclipMove() is the last variant in the Move() subset provided. It is mostly used for debugging
@@ -858,5 +1408,6 @@ namespace com.cozyhome.Actors
                                            // overlap buffer.
         public const float MIN_DISPLACEMENT = 0.001F; // min squared length of a displacement vector required for a Move() to proceed.
         public const float FLY_CREASE_EPSILON = 1F; // minimum distance angle during a crease check to disregard any normals being queried.
+        public const float INWARD_STEP_DISTANCE = 0.01F; // minimum displacement into a stepping plane
     }
 }

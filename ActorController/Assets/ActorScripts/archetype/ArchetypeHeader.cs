@@ -139,6 +139,8 @@ namespace com.cozyhome.Archetype
             public abstract void Inflate(float _amt);
             public abstract void Deflate(float _amt);
 
+            public abstract Vector3 Center();
+            public abstract float Height();
         }
 
         [System.Serializable]
@@ -245,6 +247,9 @@ namespace com.cozyhome.Archetype
                 
                 return;
             }
+
+            public override Vector3 Center() => _collider.center;
+            public override float Height() => _collider.radius;
         }
 
         [System.Serializable]
@@ -306,7 +311,7 @@ namespace com.cozyhome.Archetype
                 _collider.radius -= _amt / 2F;
             }
 
-            public float Height() => _collider.height;
+            public override float Height() => _collider.height;
 
             public static void Overlap(Vector3 _pos,
                                     Vector3 _center,
@@ -368,6 +373,8 @@ namespace com.cozyhome.Archetype
                      _interacttype);
                 return;
             }
+
+            public override Vector3 Center() => _collider.center;
         }
 
         [System.Serializable]
@@ -491,6 +498,9 @@ namespace com.cozyhome.Archetype
                 return;
             }
 
+            public override Vector3 Center() => _collider.center;
+            
+            public override float Height() => _collider.size[1];
         }
     }
 }
