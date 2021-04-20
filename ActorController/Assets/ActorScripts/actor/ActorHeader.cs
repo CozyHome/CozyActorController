@@ -72,11 +72,16 @@ namespace com.cozyhome.Actors
             [SerializeField] private MoveType MoveType = ActorHeader.MoveType.Fly;
 
             [Tooltip("The snap type the actor will abide by when determining its ground state. \nNever = The actor will never snap to the ground. \nToggled = The actor will only snap to the ground if its snapenabled boolean is set to true. \nAlways = The actor will always snap to the ground.")]
+            [Header("Snap Type Properties")]
             [SerializeField] private SlideSnapType SnapType = SlideSnapType.Always;
             [Tooltip("Whether or not the actor will snap to the ground if its snap type is set to SlideSnapType.Toggled enum.")]
             [SerializeField] private bool SnapEnabled = true;
+            [Header("Stepping Properties")]
             [Tooltip("Whether or not the actor will step on perpendicular(ish) surfaces during the traceback loop")]
             [SerializeField] private bool StepEnabled = true;
+            [Tooltip("How far up the actor can step upwards when tracing into obstructing planes")]
+            [SerializeField] private float StepHeight = 0.5F;
+            [Header("Initialization Properties")]
             [Tooltip("Whether this actor will initialize itself using Unity's Start() invokation")]
             [SerializeField] private bool InitializeOnStart = true;
 
@@ -108,6 +113,7 @@ namespace com.cozyhome.Actors
             public MoveType GetMoveType => MoveType;
             public SlideSnapType GetSnapType => SnapType;
             public bool GetSnapEnabled => SnapEnabled;
+            public float GetStepHeight => StepHeight;
             public GroundHit Ground => _groundhit;
             public GroundHit LastGround => _lastgroundhit;
             public LayerMask Mask => _filter;
@@ -863,6 +869,7 @@ namespace com.cozyhome.Actors
             SlideSnapType snaptype = actor.GetSnapType;
             Collider[] overlapbuffer = actor.Colliders;
             LayerMask layermask = actor.Mask;
+            
 
             Vector3[] normalsbuffer = actor.Normals;
             RaycastHit[] tracebuffer = actor.Hits;
@@ -878,13 +885,14 @@ namespace com.cozyhome.Actors
             float timefactor = 1F;
             float skin = ArchetypeHeader.GET_SKINEPSILON(archetype.PrimitiveType());
             float bias = ArchetypeHeader.GET_TRACEBIAS(archetype.PrimitiveType());
-
             int numbumps = 0;
             int numgroundbumps = 0;
             int numpushbacks = 0;
             int geometryclips = 0;
 
+            /* stepping values */
             bool canstep = actor.GetSnapEnabled;
+            float stepheight = actor.GetStepHeight;
 
             /* end of references */
 
@@ -1221,8 +1229,7 @@ namespace com.cozyhome.Actors
 
                         Vector3 step_position = Vector3.zero;
 
-                        canstep = canstep &&
-                        PM_SlideStepValidation(position,
+                        canstep &= PM_SlideStepValidation(position,
                             orientation,
                             normal,
                             tracepoint,
@@ -1230,6 +1237,7 @@ namespace com.cozyhome.Actors
                             overlapbuffer,
                             archetype,
                             layermask,
+                            stepheight,
                             out step_position);
 
                         if (!canstep)
@@ -1267,9 +1275,10 @@ namespace com.cozyhome.Actors
             Collider[] overlapbuffer,
             ArchetypeHeader.Archetype archetype,
             LayerMask layermask,
+            float max_step,
             out Vector3 step_position)
         {
-            const float max_correspondance = 0.1F, max_step = 0.5F, min_step = 0.01F, aux_up = 0.05F;
+            const float max_correspondance = 0.1F, min_step = 0.01F, aux_up = 0.05F;
             Vector3 aux_feet = position;
             Vector3 prim_up = orientation * new Vector3(0, 1, 0);
 
@@ -1321,6 +1330,13 @@ namespace com.cozyhome.Actors
 
             /* overlap at step position, and return true if we aren't overlapping with anything */
 
+            /* 
+                NOTE: If you'd like, you can override this stepping check here and write in a better one. I understand
+                that using a trace downward onto the surface will allow you to determine if a step is safe with varying angles. However,
+                I wanted to keep this operation relatively light (an overlap is already a lot) so feel free to try writing
+                that out yourself, it's a pretty cool set of instructions
+            */
+
             archetype.Overlap(
                 _pos: step_position,
                 _orient: orientation,
@@ -1336,10 +1352,7 @@ namespace com.cozyhome.Actors
                 overlapbuffer
             );
 
-            if (overlapcount > 0)
-                return false;
-
-            return true;
+            return !(overlapcount > 0);
         }
 
         /* 
