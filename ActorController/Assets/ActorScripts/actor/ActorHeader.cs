@@ -113,6 +113,7 @@ namespace com.cozyhome.Actors
             public MoveType GetMoveType => MoveType;
             public SlideSnapType GetSnapType => SnapType;
             public bool GetSnapEnabled => SnapEnabled;
+            public bool GetStepEnabled => StepEnabled;
             public float GetStepHeight => StepHeight;
             public GroundHit Ground => _groundhit;
             public GroundHit LastGround => _lastgroundhit;
@@ -869,7 +870,7 @@ namespace com.cozyhome.Actors
             SlideSnapType snaptype = actor.GetSnapType;
             Collider[] overlapbuffer = actor.Colliders;
             LayerMask layermask = actor.Mask;
-            
+
 
             Vector3[] normalsbuffer = actor.Normals;
             RaycastHit[] tracebuffer = actor.Hits;
@@ -891,7 +892,7 @@ namespace com.cozyhome.Actors
             int geometryclips = 0;
 
             /* stepping values */
-            bool canstep = actor.GetSnapEnabled;
+            bool canstep = actor.GetStepEnabled;
             float stepheight = actor.GetStepHeight;
 
             /* end of references */
@@ -1229,6 +1230,12 @@ namespace com.cozyhome.Actors
 
                         Vector3 step_position = Vector3.zero;
 
+                        /* only step if the following is true:
+                            1. we are grounded
+                            2. our step check is valid
+                            */
+
+                        canstep &= ground.stable;
                         canstep &= PM_SlideStepValidation(position,
                             orientation,
                             normal,
