@@ -43,6 +43,7 @@ namespace com.cozyhome.Actors
         // with getters and setters as they pollute the class and make it more complicated than it 
         // needs to be. If you somehow change the data in these hits, that's on you. I've kept it open-ended
         // so anybody can do what they want with this class when handling the actor's state.
+        [System.Serializable]
         public class GroundHit
         {
             public Vector3 actorpoint; // our actor's position at the time of our hit
@@ -59,6 +60,7 @@ namespace com.cozyhome.Actors
                 normal = Vector3.zero;
                 stable = false;
                 snapped = false;
+                distance = 0.0F;
             }
         }
 
@@ -93,8 +95,8 @@ namespace com.cozyhome.Actors
             [Tooltip("A Bitmask to help you filter out specific sets of colliders you want this actor to ignore during its movement.")]
             [SerializeField] protected LayerMask _filter;
 
-            [System.NonSerialized] private readonly GroundHit _groundhit = new GroundHit();
-            [System.NonSerialized] private readonly GroundHit _lastgroundhit = new GroundHit();
+            private GroundHit _groundhit = new GroundHit();
+            private GroundHit _lastgroundhit = new GroundHit();
 
             [System.NonSerialized] protected readonly RaycastHit[] _internalhits = new RaycastHit[ActorHeader.MAX_HITS];
 
@@ -102,8 +104,8 @@ namespace com.cozyhome.Actors
 
             [System.NonSerialized] protected readonly Vector3[] _internalnormals = new Vector3[ActorHeader.MAX_OVERLAPS];
 
-            [System.NonSerialized] public Vector3 _position;
-            [System.NonSerialized] public Vector3 _velocity;
+            [System.NonSerialized] public Vector3 position;
+            [System.NonSerialized] public Vector3 velocity;
             [System.NonSerialized] public Quaternion orientation;
 
             public RaycastHit[] Hits => _internalhits;
@@ -126,8 +128,8 @@ namespace com.cozyhome.Actors
             public static void SlideStep(IActorReceiver receiver, Actor actor, float fdt) => PM_SlideStepMove(receiver, actor, fdt);
             public static void Noclip(IActorReceiver receiver, Actor actor, float fdt) => PM_NoclipMove(receiver, actor, fdt);
 
-            public void SetVelocity(Vector3 velocity) => this._velocity = velocity;
-            public void SetPosition(Vector3 position) => this._position = position;
+            public void SetVelocity(Vector3 velocity) => this.velocity = velocity;
+            public void SetPosition(Vector3 position) => this.position = position;
             public void SetOrientation(Quaternion orientation) => this.orientation = orientation;
             public void SetMoveType(MoveType movetype) => this.MoveType = movetype;
             public void SetSnapType(SlideSnapType snaptype) => this.SnapType = snaptype;
@@ -178,8 +180,8 @@ namespace com.cozyhome.Actors
             */
 
             /* actor transform values */
-            Vector3 position = actor._position;
-            Vector3 velocity = actor._velocity;
+            Vector3 position = actor.position;
+            Vector3 velocity = actor.velocity;
             Quaternion orientation = actor.orientation;
 
             /* archetype buffers & references */
@@ -377,8 +379,8 @@ namespace com.cozyhome.Actors
             */
 
             /* actor transform values */
-            Vector3 position = actor._position;
-            Vector3 velocity = actor._velocity;
+            Vector3 position = actor.position;
+            Vector3 velocity = actor.velocity;
             Quaternion orientation = actor.orientation;
 
 
@@ -808,11 +810,11 @@ namespace com.cozyhome.Actors
                     if (stability) // if stable, just orient and maintain magnitude
                     {
                         // anyways just clip along the newly discovered stable plane
+                        // preserve magnitude
                         VectorHeader.ClipVector(ref velocity, plane);
 
                         // im indifferent to whether I should clip or orient at this stage, but for now
                         // we'll stick to clipping
-
                     }
                     else
                     {
@@ -859,8 +861,8 @@ namespace com.cozyhome.Actors
             */
 
             /* actor transform values */
-            Vector3 position = actor._position;
-            Vector3 velocity = actor._velocity;
+            Vector3 position = actor.position;
+            Vector3 velocity = actor.velocity;
             Quaternion orientation = actor.orientation;
 
 
@@ -916,7 +918,7 @@ namespace com.cozyhome.Actors
             */
 
             /* feel free to change these values, I think they're pretty decent atm */
-            float gtracelen = (lastground.stable && lastground.snapped) ? 0.075F : 0.05F;
+            float gtracelen = (lastground.stable && lastground.snapped) ? 0.2F : 0.15F;
 
             while (numgroundbumps++ < MAX_GROUNDBUMPS &&
                 gtracelen > 0F)
@@ -946,7 +948,7 @@ namespace com.cozyhome.Actors
                 */
                 archetype.Trace(gposition + (updir * skin),
                     groundtracedir,
-                    gtracelen + skin,
+                    gtracelen + 2F * skin,
                     orientation,
                     layermask,
                     /* inflate */ 0F,
@@ -1066,7 +1068,7 @@ namespace com.cozyhome.Actors
 
                         }
                         else /* if no ceiling is found, move the require distance upward */
-                            gposition += updir * (skin);
+                            gposition += updir * (skin + MIN_HOVER_DISTANCE);
 
                         /* 
                          if a snap was valid and allowed, 
@@ -1144,7 +1146,13 @@ namespace com.cozyhome.Actors
                         Collider otherc = overlapbuffer[_colliderindex];
                         Transform othert = otherc.GetComponent<Transform>();
 
-                        if (Physics.ComputePenetration(self, position, orientation, otherc, othert.position, othert.rotation, out Vector3 _normal, out float _distance))
+                        if (Physics.ComputePenetration(self, 
+                            position, orientation,
+                            otherc, 
+                            othert.position, 
+                            othert.rotation, 
+                            out Vector3 _normal, 
+                            out float _distance))
                         {
                             position += _normal * (_distance + skin);
 
@@ -1404,7 +1412,7 @@ namespace com.cozyhome.Actors
             actor.Ground.Clear();
             actor.LastGround.Clear();
 
-            actor.SetPosition(actor._position + actor._velocity * fdt);
+            actor.SetPosition(actor.position + actor.velocity * fdt);
         }
 
 
@@ -1429,5 +1437,6 @@ namespace com.cozyhome.Actors
         public const float MIN_DISPLACEMENT = 0.001F; // min squared length of a displacement vector required for a Move() to proceed.
         public const float FLY_CREASE_EPSILON = 1F; // minimum distance angle during a crease check to disregard any normals being queried.
         public const float INWARD_STEP_DISTANCE = 0.01F; // minimum displacement into a stepping plane
+        public const float MIN_HOVER_DISTANCE = 0.025F;
     }
 }
