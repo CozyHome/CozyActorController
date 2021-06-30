@@ -16,21 +16,11 @@ namespace com.cozyhome.Actors
 
         public void OnFixedUpdate()
         {
+            // auto sync transforms should be true or else you'll experience actor on actor tunneling
             float fdt = Time.fixedDeltaTime;
-            Entities.ForEach((CharacterActor actor) => 
-            {
-                actor.StartFrame();
-            });
-
-            Entities.ForEach((CharacterActor actor) => 
-            {
-                actor.MoveFrame(fdt);
-            });
-
-            Entities.ForEach((CharacterActor actor) => 
-            {
-                actor.EndFrame();
-            });
+            Entities.ForEach((CharacterActor actor) => actor.StartFrame());
+            Entities.ForEach((CharacterActor actor) => actor.MoveFrame(fdt));
+            Entities.ForEach((CharacterActor actor) => actor.EndFrame());
         }
 
         public static void Register(CharacterActor actor)

@@ -58,9 +58,9 @@ namespace com.cozyhome.Actors
                 actorpoint = Vector3.zero;
                 point = Vector3.zero;
                 normal = Vector3.zero;
+                distance = 0.0F;
                 stable = false;
                 snapped = false;
-                distance = 0.0F;
             }
         }
 
@@ -251,7 +251,7 @@ namespace com.cozyhome.Actors
                             out float mindistance))
                         {
                             /* resolve pushback using closest exit distance */
-                            position += normal * (mindistance);
+                            position += normal * (mindistance + MIN_PUSHBACK_DEPTH);
 
                             /* only consider normals that we are technically penetrating into */
                             if (VectorHeader.Dot(velocity, normal) < 0F)
@@ -264,7 +264,7 @@ namespace com.cozyhome.Actors
             }
 
             // We must assume that our position is valid.
-            actor.SetPosition(position);
+            // actor.SetPosition(position);
 
             while (numbumps++ <= ActorHeader.MAX_BUMPS && timefactor > 0)
             {
@@ -609,8 +609,7 @@ namespace com.cozyhome.Actors
                              don't move upward at all.
                             */
 
-                            gposition += updir * Mathf.Max(
-                                Mathf.Min(snaptrace.distance - skin, skin), 0F);
+                            gposition += updir * Mathf.Max(Mathf.Min(snaptrace.distance - skin, skin), 0F);
                         }
                         else /* if no ceiling is found, move the require distance upward */
                             gposition += updir * (skin);
@@ -701,7 +700,7 @@ namespace com.cozyhome.Actors
                             out Vector3 _normal,
                             out float _distance))
                         {
-                            position += _normal * (_distance);
+                            position += _normal * (_distance + MIN_PUSHBACK_DEPTH);
 
                             PM_SlideDetermineImmediateGeometry(ref velocity,
                                 ref lastplane,
@@ -716,8 +715,7 @@ namespace com.cozyhome.Actors
                     }
                 }
             }
-            actor.SetPosition(position);
-
+            
             while (numbumps++ < ActorHeader.MAX_BUMPS
                   && timefactor > 0)
             {
@@ -781,22 +779,7 @@ namespace com.cozyhome.Actors
                 }
             }
 
-            /* Safety check to prevent multiple actors phasing through each other... Feel free to disable this for performance if you'd like*/
-            archetype.Overlap(
-                    position,
-                    orientation,
-                    layermask,
-                    /* inflate */ 0F,
-                    QueryTriggerInteraction.Ignore,
-                    colliderbuffer,
-                    out int safetycount);
-
-            /* filter ourselves out of the collider buffer, no need to check for triggers */
-            ArchetypeHeader.OverlapFilters.FilterSelf(ref safetycount, self, colliderbuffer);
-
-            if (safetycount == 0)
-                actor.SetPosition(position);
-
+            actor.SetPosition(position);
             actor.SetVelocity(velocity);
         }
 
@@ -1217,7 +1200,7 @@ namespace com.cozyhome.Actors
                             out Vector3 _normal, 
                             out float _distance))
                         {
-                            position += _normal * (_distance);
+                            position += _normal * (_distance + MIN_PUSHBACK_DEPTH);
 
                             PM_SlideDetermineImmediateGeometry(ref velocity,
                                 ref lastplane,
@@ -1232,8 +1215,7 @@ namespace com.cozyhome.Actors
                     }
                 }
             }
-            actor.SetPosition(position);
-
+            
             while (numbumps++ < ActorHeader.MAX_BUMPS
                   && timefactor > 0)
             {
@@ -1325,22 +1307,7 @@ namespace com.cozyhome.Actors
                 }
             }
 
-            /* Safety check to prevent multiple actors phasing through each other... Feel free to disable this for performance if you'd like*/
-            archetype.Overlap(
-                    position,
-                    orientation,
-                    layermask,
-                    /* inflate */ 0F,
-                    QueryTriggerInteraction.Ignore,
-                    overlapbuffer,
-                    out int safetycount);
-
-            /* filter ourselves out of the collider buffer, no need to check for triggers */
-            ArchetypeHeader.OverlapFilters.FilterSelf(ref safetycount, self, overlapbuffer);
-
-            if (safetycount == 0)
-                actor.SetPosition(position);
-
+            actor.SetPosition(position);
             actor.SetVelocity(velocity);
         }
 
@@ -1523,6 +1490,6 @@ namespace com.cozyhome.Actors
         public const float FLY_CREASE_EPSILON = 1F; // minimum distance angle during a crease check to disregard any normals being queried.
         public const float INWARD_STEP_DISTANCE = 0.01F; // minimum displacement into a stepping plane
         public const float MIN_HOVER_DISTANCE = 0.025F;
-        public const float MIN_PUSHBACK_DEPTH = 0.0001F;
+        public const float MIN_PUSHBACK_DEPTH = 0.00005F;
     }
 }
