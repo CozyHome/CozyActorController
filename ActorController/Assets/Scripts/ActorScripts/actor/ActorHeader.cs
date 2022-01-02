@@ -960,7 +960,10 @@ namespace com.cozyhome.Actors
             // if we're grounded, we'd like to stay that way! If we're not grounded, search a smaller distance to prevent
             // getting snapped to the floor in a visibly noticeable way by the camera. If you're interpolating player movement then
             // this may not be visible.
-            float gtracelen = (lastground.stable && lastground.snapped) ? MAX_GROUNDQUERY : MIN_GROUNDQUERY;
+            float gtracelen = MIN_GROUNDQUERY;// (lastground.stable/* && lastground.snapped*/) ? MAX_GROUNDQUERY : MIN_GROUNDQUERY;
+
+            if(lastground.snapped && lastground.stable)
+                gtracelen = MAX_GROUNDQUERY > stepheight ? MAX_GROUNDQUERY : stepheight; // downward stepping
 
             while (numgroundbumps++ < MAX_GROUNDBUMPS &&
                 gtracelen > 0F)
@@ -1397,7 +1400,7 @@ namespace com.cozyhome.Actors
                 overlapbuffer
             );
 
-            return !(overlapcount > 0);
+            return overlapcount == 0;
         }
 
         /* 
@@ -1476,8 +1479,8 @@ namespace com.cozyhome.Actors
             void OnTriggerHit(TriggerHitType triggertype, Collider trigger);
         }
 
-        public const float MIN_GROUNDQUERY = 0.1F; // distance queried in our ground traces if we weren't grounded the previous simulated step
-        public const float MAX_GROUNDQUERY = 0.3F; // distnace queried in our ground traces if we were grounded in the previous simulation step
+        public const float MIN_GROUNDQUERY = .1F; // distance queried in our ground traces if we weren't grounded the previous simulated step
+        public const float MAX_GROUNDQUERY = .5F; // distnace queried in our ground traces if we were grounded in the previous simulation step
 
         public const int MAX_GROUNDBUMPS = 2; // # of ground snaps/iterations in a SlideMove() 
         public const int MAX_PUSHBACKS = 8; // # of iterations in our Pushback() funcs

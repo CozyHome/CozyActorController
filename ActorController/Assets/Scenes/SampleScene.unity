@@ -868,7 +868,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _View: {fileID: 1546133265}
   _Actor: {fileID: 1484041274}
-  _LookSensitivity: 180
+  _LookSensitivity: 720
   _MaxVerticalViewAngle: 85
   _MaxMovementSpeed: 12
 --- !u!4 &1484041277

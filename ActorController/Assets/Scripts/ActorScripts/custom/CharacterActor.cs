@@ -9,7 +9,7 @@ public class CharacterActor : MonoBehaviour, ActorHeader.IActorReceiver, IEntity
 
     void Start()
     {
-        ActorSystem.Register(this);
+        // ActorSystem.Register(this);
     }
 
     public void StartFrame()

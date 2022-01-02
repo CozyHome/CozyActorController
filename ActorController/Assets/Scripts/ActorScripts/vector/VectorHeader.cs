@@ -94,7 +94,7 @@ namespace com.cozyhome.Vectors
             Vector3 _point,
             Vector3 _planecenter,
             Vector3 _planenormal)
-        => _point - ProjectVector(_planecenter - _point, _planenormal);
+        => _point + ProjectVector(_planecenter - _point, _planenormal);
 
         public static Vector3 CrossProjection(
             Vector3 _v,
@@ -121,6 +121,20 @@ namespace com.cozyhome.Vectors
                 _v = _f;
                 _v.Normalize();
                 _v *= _m;
+            }
+        }
+
+        public static float LinePlaneIntersection((Vector3 p, Vector3 r) line, (Vector3 x, Vector3 n) plane) 
+        {
+            // (c - p) * n =  upper
+            // (r) * n = lower
+            float l = Dot(line.r, plane.n);
+            if(Mathf.Approximately(l, 0F))
+                return -1F;
+            else
+            {
+                float u = Dot(plane.x - line.p, plane.n);
+                return u / l;
             }
         }
     }
